@@ -1,4 +1,4 @@
--e git://github.com/ruairif/ahrs.git@b17f649ee07a8e0fa27df9f3acc05bbf0b0f3041#egg=ahrs_sensors-master
+-e git://github.com/ruairif/ahrs.git@master#egg=ahrs_sensors-master
 argparse==1.2.1
 msgpack-python==0.4.0
 pyzmq==14.0.1
