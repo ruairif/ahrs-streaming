@@ -4,7 +4,7 @@ IMU (accelerometer and gyroscope) or AHRS (accelerometer, gyroscope and
 magnetometer) data.\
 '''
 
-from math import sqrt
+from math import sqrt, atan2, asin, pi
 
 
 class Madgwick(object):
@@ -240,7 +240,6 @@ class Madgwick(object):
             q[i] += rate[i] * self.sample_period
 
         q = Madgwick.normalise(q)
-
         self.quaternion = q
         return q
 
@@ -252,6 +251,36 @@ class Madgwick(object):
                 'x': self.quaternion.x,
                 'y': self.quaternion.y,
                 'z': self.quaternion.z}
+
+    def to_euler(self):
+        '''\
+        Convert a quaternion q to yaw pitch and roll angles\
+        '''
+        q = self.quaternion
+        rotate_x0 = 2.0*(q.y*q.z + q.w*q.x)
+        rotate_x1 = q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z
+        rotate_x = 0.0
+        if rotate_x0 and rotate_x1:
+            rotate_x = atan2(rotate_x0, rotate_x1)
+
+        rotate_y0 = -2.0*(q.x*q.z - q.w*q.y)
+        rotate_y = 0.0
+        if rotate_y0 >= 1.0:
+            rotate_0 = pi/2.0
+        elif rotate_y0 <= -1.0:
+            rotate_y = -pi/2.0
+        else:
+            rotate_y = asin(rotate_y0)
+
+        rotate_z0 = 2.0*(q.x*q.y + q.w*q.z)
+        rotate_z1 = q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z
+        rotate_z = 0.0
+        if rotate_z0 and rotate_z1:
+            rotate_z = atan2(rotate_z0, rotate_z1)
+
+        return {'x': rotate_x,
+                'y': rotate_y,
+                'z': rotate_x}
 
     @classmethod
     def normalise(cls, vector):
