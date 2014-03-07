@@ -52,7 +52,8 @@ class SensorWorker(threading.Thread):
                  port=5666,
                  baudrate=9600,
                  gain=1.0,
-                 sample_rate=100):
+                 sample_rate=100,
+                 _id='sensors'):
         threading.Thread.__init__(self)
         self.context = zmq.Context()
         self.pub = self.context.socket(zmq.PUB)
@@ -63,6 +64,7 @@ class SensorWorker(threading.Thread):
         self.raw = raw
         self.sample_rate = sample_rate
         self.gain = gain
+        self._id = _id
         if device is not None:
             if device.startswith('/dev/i2c-'):
                 bus = int(device[9:])
@@ -93,7 +95,7 @@ class SensorWorker(threading.Thread):
                 sensors_data_renamed = {}
                 for key in sensors_data.keys():
                     key_name = SENSOR_MAP[key]
-                    if key is None:
+                    if key_name is None:
                         sensors_data_renamed = sensors_data[key]
                         break
                     else:
@@ -103,9 +105,10 @@ class SensorWorker(threading.Thread):
                 sensors_data['quaternion'] = self.update_quaternion(
                     quaternion,
                     sensors_data)
+                sensors_data['euler'] = quaternion.to_euler()
                 sensors_data['read_time'] = time() - read_time
                 sensors_data['time'] = time()
-                sensors_data['id'] = 0x01
+                sensors_data['id'] = self._id
                 packed_data = msgpack.dumps(sensors_data)
                 self.pub.send(packed_data)
         except KeyboardInterrupt:
@@ -117,9 +120,9 @@ class SensorWorker(threading.Thread):
             self.clean_up()
 
     def update_quaternion(self, quaternion, sensors):
-        accel = sensors['accel']
-        gyro = sensors['gyro']
-        mag = sensors['mag']
+        accel = sensors.get('accel', None)
+        gyro = sensors.get('gyro', None)
+        mag = sensors.get('mag', None)
         quaternion.update(accel, gyro, mag)
         return quaternion.as_dict()
 
@@ -230,13 +233,21 @@ def main():
                         nargs='?',
                         help='Gain value for gyroscope bias')
 
+    parser.add_argument('--id',
+                        type=str,
+                        metavar='id',
+                        nargs='?',
+                        help='identification string for a particular sensor'
+                             ' or group of sensors')
+
     args = parser.parse_args()
     worker = SensorWorker(bus=args.bus,
                           device=args.device,
                           sensors=args.sensors,
                           raw=args.raw,
                           port=args.port,
-                          baudrate=args.baudrate)
+                          baudrate=args.baudrate,
+                          _id=args.id)
 
     worker.start()
 
