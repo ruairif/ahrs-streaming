@@ -6,18 +6,20 @@ import threading
 import zmq
 import msgpack
 import argparse
-from ahrs_sensors import ADXL345, HMC5883L, ITG3200, Nav440
+from ahrs_sensors import ADXL345, HMC5883L, ITG3200, Nav440, L3G4200D
 from time import time, sleep
 from madgwick import Madgwick
 
 SENSORS = {'ADXL345': ADXL345,
            'HMC5883L': HMC5883L,
            'ITG-3200': ITG3200,
+           'L3G4200D': L3G4200D,
            'NAV440': Nav440}
 
 SENSOR_MAP = {'ADXL345': 'accel',
               'HMC5883L': 'mag',
               'ITG3200': 'gyro',
+              'L3G4200D': 'gyro',
               'Nav440': None}
 
 BAUDRATES = (110,
