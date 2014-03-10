@@ -199,14 +199,6 @@ def main():
                         nargs='?',
                         help='device bus to read data from')
 
-    parser.add_argument('-r',
-                        '--raw',
-                        type=bool,
-                        default=False,
-                        const='raw',
-                        nargs='?',
-                        help='Return raw or physical data')
-
     parser.add_argument('--baudrate',
                         type=ValidChoice(BAUDRATES, int),
                         default=9600,
@@ -230,6 +222,7 @@ def main():
                         help='Sample rate of sensors in Hertz')
 
     parser.add_argument('-g',
+                        '--gain',
                         type=float,
                         metavar='gain',
                         nargs='?',
