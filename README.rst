@@ -6,11 +6,9 @@ Any sensor that implements the sensor protocol in the required ahrs_ library
 can be used. To add a new sensor include it in the sensors section of the
 config file that is used when the program is run.
 
-.. _ahrs: https://github.com/ruairif/ahrs
 
 Usage
 -----
-
 To use the worker daemon from the commanline::
 
     usage: worker.py [-h] [-p [PORT]] [-b [BUS]] [-d [DEVICE]]
@@ -75,3 +73,5 @@ structure below::
         module.submodule:
           - SENSOR
 
+
+.. _ahrs: https://github.com/ruairif/ahrs
