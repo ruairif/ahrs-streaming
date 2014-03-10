@@ -6,21 +6,24 @@ import threading
 import zmq
 import msgpack
 import argparse
-from ahrs_sensors import ADXL345, HMC5883L, ITG3200, Nav440, L3G4200D
+import yaml
+import os
+from sensor import SensorTypes as ST
 from time import time, sleep
 from madgwick import Madgwick
 
-SENSORS = {'ADXL345': ADXL345,
-           'HMC5883L': HMC5883L,
-           'ITG-3200': ITG3200,
-           'L3G4200D': L3G4200D,
-           'NAV440': Nav440}
 
-SENSOR_MAP = {'ADXL345': 'accel',
-              'HMC5883L': 'mag',
-              'ITG3200': 'gyro',
-              'L3G4200D': 'gyro',
-              'Nav440': None}
+DEFAULTS = {'port': 5666,
+            'bus':  1,
+            'device': None,
+            'baudrate': None,
+            'sensors': ['ADXL345', 'ITG3200'],
+            'sample_rate': 100,
+            'gain': 0.5,
+            'id': 'IMU'}
+
+SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
+DEFAULT_CONFIG_FILE = SCRIPT_PATH + '/default.yaml'
 
 BAUDRATES = (110,
              300,
@@ -43,6 +46,10 @@ BAUDRATES = (110,
              460800,
              921600)
 
+SENSORS = {}
+SENSORS_MAP = {}
+
+MODULES = {}
 
 class SensorWorker(threading.Thread):
 
@@ -50,7 +57,6 @@ class SensorWorker(threading.Thread):
                  bus=1,
                  device=None,
                  sensors=None,
-                 raw=False,
                  port=5666,
                  baudrate=9600,
                  gain=1.0,
@@ -63,7 +69,6 @@ class SensorWorker(threading.Thread):
         self.pub.setsockopt(zmq.LINGER, 40)
         self.pub.setsockopt(zmq.SNDHWM, 1)
         signal.signal(signal.SIGINT, self.clean_up)
-        self.raw = raw
         self.sample_rate = sample_rate
         self.gain = gain
         self._id = _id
@@ -97,7 +102,7 @@ class SensorWorker(threading.Thread):
                 sensors_data_renamed = {}
                 for key in sensors_data.keys():
                     key_name = SENSOR_MAP[key]
-                    if key_name is None:
+                    if key_name in ['ahrs', 'imu']:
                         sensors_data_renamed = sensors_data[key]
                         break
                     else:
@@ -142,6 +147,8 @@ class IntRange(object):
         self.start, self.stop = start, stop
 
     def __call__(self, value):
+        if value is None or value == 'None':
+            return
         try:
             value = int(value)
         except ValueError:
@@ -159,26 +166,32 @@ class ValidChoice(object):
         self.choice_type = choice_type
 
     def __call__(self, value):
+        if value is None or value == 'None':
+            return
+
+        if not self.valid_choices:
+            return value
         try:
             value = self.choice_type(value)
         except ValueError:
             raise argparse.ArgumentTypeError(
                 '"%s" is not a valid %s' % (value, self.choice_type))
         if self.choice_type == str:
-            value = value.upper()
+            _value = value.upper()
             self.valid_choices = [s.upper() for s in self.valid_choices]
-        if value not in self.valid_choices:
+        if _value not in self.valid_choices:
             raise argparse.ArgumentTypeError(
-                '%s is not a valid option' % value)
+                '%s is not a valid option.\n'
+                'Valid options are: %s.' % (value,
+                                            str(self.valid_choices)[1:-1]))
         return value
 
-
-def main():
+def create_options_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p',
                         '--port',
                         type=IntRange(1, 65535),
-                        default=5666,
+                        default=None,
                         const='port',
                         nargs='?',
                         help='tcp port to publish data on: {0, 1, ..., 65535}')
@@ -186,7 +199,7 @@ def main():
     parser.add_argument('-b',
                         '--bus',
                         type=IntRange(0, 32),
-                        default=1,
+                        default=None,
                         const='bus',
                         nargs='?',
                         help='I2C bus to read data from')
@@ -201,7 +214,7 @@ def main():
 
     parser.add_argument('--baudrate',
                         type=ValidChoice(BAUDRATES, int),
-                        default=9600,
+                        default=None,
                         const='baudrate',
                         nargs='?',
                         help='Baudrate to use for serial sensors')
@@ -211,9 +224,7 @@ def main():
                         type=ValidChoice(SENSORS.keys()),
                         metavar='sensors',
                         nargs='+',
-                        help='Names of sensors to read data from.'
-                             'Supported sensors include:\n %s'
-                             % ', '.join(SENSORS.keys()))
+                        help='Names of sensors to read data from.')
 
     parser.add_argument('--sample-rate',
                         type=int,
@@ -235,14 +246,70 @@ def main():
                         help='identification string for a particular sensor'
                              ' or group of sensors')
 
-    args = parser.parse_args()
-    worker = SensorWorker(bus=args.bus,
-                          device=args.device,
-                          sensors=args.sensors,
-                          raw=args.raw,
-                          port=args.port,
-                          baudrate=args.baudrate,
-                          _id=args.id)
+
+    parser.add_argument('-f',
+                        '--config-file',
+                        type=str,
+                        default=None,
+                        const='config_file',
+                        nargs='?',
+                        help='YAML formatted config file to read config'
+                             ' options from')
+    return parser
+
+
+def main():
+
+    configs_parser = create_options_parser()
+
+    args = configs_parser.parse_args()
+
+    with open(args.config_file or DEFAULT_CONFIG_FILE) as f:
+        config_data = yaml.load(f)
+
+
+    options = config_data.get('options', None)
+    conf_args = []
+
+    for key in DEFAULTS.keys():
+        default_value = DEFAULTS[key]
+        config_value = options.get(key)
+        arg_key = '--' + key.replace('_', '-')
+
+        if isinstance(config_value, list) or isinstance(default_value, list):
+            conf_args += [arg_key] + list(config_value) or default_value
+
+        elif config_value or default_value:
+            config_value = str(config_value) if config_value else None
+            conf_args += [arg_key, config_value or str(default_value)]
+
+    configs = configs_parser.parse_args(conf_args)
+
+    for module, classes in config_data.get('sensors', {}).items():
+        try:
+            MODULES[module] = __import__(module, fromlist=classes)
+            _ = MODULES[module]
+            for sensor in classes:
+                try:
+                    sensor_obj = vars(_)[sensor]
+                    SENSORS[sensor.upper()] = sensor_obj
+                    SENSORS_MAP[sensor] = ST.name(sensor_obj._type)
+                except KeyError:
+                    raise ImportError('Cannot import name "%s"' % sensor)
+                    sys.exit(0)
+        except ImportError as e:
+            raise e
+            sys.exit(0)
+
+    options_parser = create_options_parser()
+    args = options_parser.parse_args()
+
+    worker = SensorWorker(bus=args.bus or configs.bus,
+                          device=args.device or configs.device,
+                          sensors=args.sensors or configs.sensors,
+                          port=args.port or configs.port,
+                          baudrate=args.baudrate or configs.baudrate,
+                          _id=args.id or configs.id)
 
     worker.start()
 

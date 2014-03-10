@@ -1,0 +1,19 @@
+options:
+    port: 5666
+    bus: 1
+    device: null
+    baudrate: null
+    sensors: 
+      - ADXL345
+      - ITG3200
+    sample_rate: 100
+    gain: 0.5
+    id: IMU
+
+sensors:
+    ahrs_sensors: 
+       - ADXL345
+       - HMC5883L
+       - ITG3200
+       - L3G4200D
+       - Nav440
