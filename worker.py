@@ -101,7 +101,7 @@ class SensorWorker(threading.Thread):
                                      for sensor in self.sensors.sensors])
                 sensors_data_renamed = {}
                 for key in sensors_data.keys():
-                    key_name = SENSOR_MAP[key]
+                    key_name = SENSORS_MAP[key]
                     if key_name in ['ahrs', 'imu']:
                         sensors_data_renamed = sensors_data[key]
                         break
@@ -127,9 +127,10 @@ class SensorWorker(threading.Thread):
             self.clean_up()
 
     def update_quaternion(self, quaternion, sensors):
-        accel = sensors.get('accel', None)
-        gyro = sensors.get('gyro', None)
-        mag = sensors.get('mag', None)
+        _ = ST.name
+        accel = sensors.get(_(ST.ACCELEROMETER), None)
+        gyro = sensors.get(_(ST.GYROSCOPE), None)
+        mag = sensors.get(_(ST.MAGNETOMETER), None)
         quaternion.update(accel, gyro, mag)
         return quaternion.as_dict()
 
@@ -185,6 +186,7 @@ class ValidChoice(object):
                 'Valid options are: %s.' % (value,
                                             str(self.valid_choices)[1:-1]))
         return value
+
 
 def create_options_parser():
     parser = argparse.ArgumentParser()
@@ -304,9 +306,11 @@ def main():
     options_parser = create_options_parser()
     args = options_parser.parse_args()
 
+    sensors = list(set((args.sensors or []) + configs.sensors))
+
     worker = SensorWorker(bus=args.bus or configs.bus,
                           device=args.device or configs.device,
-                          sensors=args.sensors or configs.sensors,
+                          sensors=sensors,
                           port=args.port or configs.port,
                           baudrate=args.baudrate or configs.baudrate,
                           _id=args.id or configs.id)
